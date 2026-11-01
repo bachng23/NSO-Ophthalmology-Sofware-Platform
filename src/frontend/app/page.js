@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useId } from "react";
 
 import PatientHistory from "./components/PatientHistory";
 import {useWorkspaceState,useWorkspaceCache} from "./components/SessionWorkspace";
-import { blankProfile, baselineFrom, EMPTY_FOLLOWUP, today, checkedJson, clinicalError } from "./lib/clinical";
+import { blankProfile, baselineFrom, demoFollowupFrom, EMPTY_FOLLOWUP, today, checkedJson, clinicalError } from "./lib/clinical";
 import demoAssessments from "./lib/demo-assessments.json";
 
 const API = process.env.NEXT_PUBLIC_API_BASE || "/backend";
@@ -374,7 +374,7 @@ export default function Page() {
       if (!r.ok) await clinicalJson(r);
       const result = await clinicalJson(r);
       if(requestVersion !== operation.current) return;
-      setPred(result); setFu(baselineFrom(inp,visitDate)); setBaselineHistory(h=>[...h,{date:visitDate,design:result.design_id}]);
+      setPred(result); setFu(demoAssessments[selectedPatient] ? demoFollowupFrom(inp,visitDate) : baselineFrom(inp,visitDate)); setFuRes(null); setBaselineHistory(h=>[...h,{date:visitDate,design:result.design_id}]);
       setStep(2);
       window.scrollTo(0, 0);
     } catch (e) {
@@ -449,7 +449,7 @@ export default function Page() {
       if (!r.ok) await clinicalJson(r);
       const result=await clinicalJson(r); if(version !== operation.current) return; setPred(result);
       const updated={...inp,odSphere:fu.currentOdSphere,osSphere:fu.currentOsSphere,odAl:fu.followupOd,osAl:fu.followupOs};
-      setInp(updated);setVisitDate(fu.followupDate || visitDate);setFu(baselineFrom(updated,fu.followupDate || visitDate));setFuRes(null);
+      setInp(updated);setVisitDate(fu.followupDate || visitDate);setFu(demoAssessments[selectedPatient] ? demoFollowupFrom(updated,fu.followupDate || visitDate) : baselineFrom(updated,fu.followupDate || visitDate));setFuRes(null);
       setBaselineHistory(h=>[...h,{date:fu.followupDate || visitDate,design:result.design_id}]);
       setApproval(null);
       setJob(null);
@@ -505,6 +505,12 @@ export default function Page() {
 
   }
 
+  function loadDemoFollowup() {
+    if (!demoAssessments[selectedPatient] || !pred) return;
+    followupRequest.current++; setFuPending(false); setFuRes(null); setErr(null);
+    setFu(demoFollowupFrom(inp,visitDate));
+  }
+
   const setFuVal = (k) => (e) => {
     const nextFu = { ...fu, [k]: e.target.value };
     setFu(nextFu);
@@ -527,12 +533,12 @@ export default function Page() {
         {!clinicalSession ? <form onSubmit={async e=>{e.preventDefault();try{const response=await fetch(`${API}/api/v3/cases`,{headers:{Authorization:`Bearer ${accessCode}`},cache:"no-store"});const data=await response.json();if(!response.ok)throw new Error(data.detail?.message || "Access was not authorized");setAssignedPatients([...new Set(data.cases.map(c=>c.patient_id))]);clearClinicalData();setSelectedPatient(data.cases[0]?.patient_id || "");loadDemoAssessment(data.cases[0]?.patient_id);setClinicalSession(accessCode);setAccessCode("");setErr(null);}catch(error){setErr(clinicalError(error));}}}>
           <label className="field">Clinical session access code<input type="password" autoComplete="off" required value={accessCode} onChange={e=>setAccessCode(e.target.value)} /></label><button className="btn btn-primary">Connect assigned patients</button>
         </form> : null}</details>}
-        {clinicalSession && <div className="research-session"><label className="field">Find patient<input type="search" placeholder="Search by patient ID" value={patientSearch} onChange={e=>setPatientSearch(e.target.value)} /></label><label className="field">Assigned patient<select value={selectedPatient} aria-label="Assigned patient" disabled={loading || submitting || fuPending} onChange={e=>selectPatient(e.target.value)}>{assignedPatients.filter(p=>p.toLowerCase().includes(patientSearch.toLowerCase()) || p===selectedPatient).map(p=><option key={p}>{p}</option>)}</select></label><label className="field">Assessment date<input aria-label="Assessment date" type="date" required max={today()} value={visitDate} disabled={loading || submitting || step !== 1} onInput={e=>{invalidateClinical();setVisitDate(e.currentTarget.value);}} onChange={e=>{invalidateClinical();setVisitDate(e.target.value);}} /></label><div className="clinical-session-actions"><span className="note">{adminSession ? adminUsername : "Clinical session"}</span><button className="btn btn-ghost" onClick={closeClinicalSession}>Sign out</button></div></div>}
+        {clinicalSession && <div className="research-session"><label className="field">Find patient<input type="search" placeholder="Search by patient ID" value={patientSearch} onChange={e=>setPatientSearch(e.target.value)} /></label><label className="field">Assigned patient<select value={selectedPatient} aria-label="Assigned patient" disabled={loading || submitting || fuPending} onChange={e=>selectPatient(e.target.value)}>{assignedPatients.filter(p=>p.toLowerCase().includes(patientSearch.toLowerCase()) || p===selectedPatient).map(p=><option key={p}>{p}</option>)}</select></label><label className="field">Assessment date<input aria-label="Assessment date" type="date" required max={demoAssessments[selectedPatient] ? undefined : today()} value={visitDate} disabled={loading || submitting || step !== 1} onInput={e=>{invalidateClinical();setVisitDate(e.currentTarget.value);}} onChange={e=>{invalidateClinical();setVisitDate(e.target.value);}} /></label><div className="clinical-session-actions"><span className="note">{adminSession ? adminUsername : "Clinical session"}</span><button className="btn btn-ghost" onClick={closeClinicalSession}>Sign out</button></div></div>}
       </section>
       {err && <div className="err" role="alert">{err}</div>}
 
       {(!authRequired || (clinicalSession && selectedPatient)) && !demoAssessments[selectedPatient] && <p className="assessment-source">Manual assessment · verify current measurements. Drafts are retained in this session.</p>}
-      {!authRequired && !clinicalSession && <label className="field">Assessment date<input aria-label="Assessment date" type="date" required max={today()} value={visitDate} disabled={loading || submitting || step !== 1} onInput={e=>{invalidateClinical();setVisitDate(e.currentTarget.value);}} onChange={e=>{invalidateClinical();setVisitDate(e.target.value);}} /></label>}
+      {!authRequired && !clinicalSession && <label className="field">Assessment date<input aria-label="Assessment date" type="date" required max={demoAssessments[selectedPatient] ? undefined : today()} value={visitDate} disabled={loading || submitting || step !== 1} onInput={e=>{invalidateClinical();setVisitDate(e.currentTarget.value);}} onChange={e=>{invalidateClinical();setVisitDate(e.target.value);}} /></label>}
       {clinicalSession && selectedPatient && <PatientHistory patient={selectedPatient} session={clinicalSession} />}
       {baselineHistory.length > 0 && <details className="visit-history"><summary>Assessment activity · {baselineHistory.length} recommendation(s) in this session</summary>{baselineHistory.map((v,i)=><p key={i}>{v.date} · {v.design}</p>)}</details>}
       {(!authRequired || (clinicalSession && selectedPatient)) && step === 1 && (
@@ -542,7 +548,7 @@ export default function Page() {
           adv={adv} setA={setA} setAdv={setAdv} advOpen={advOpen} setAdvOpen={setAdvOpen}
           res={res} setR={setR} resOpen={resOpen} setResOpen={setResOpen}
           loading={loading} progress={progress} longRunning={longRunning}
-          hasResult={!!pred} elapsedSeconds={elapsedSeconds} run={()=>{ if(!visitDate || visitDate > today()) {setErr("Choose an assessment date on or before today.");return;} setReviewing(true); }}
+          hasResult={!!pred} elapsedSeconds={elapsedSeconds} run={()=>{ if(!visitDate || (!demoAssessments[selectedPatient] && visitDate > today())) {setErr("Choose an assessment date on or before today.");return;} setReviewing(true); }}
           go={(i) => (i === 2 && pred ? goFollowup() : i === 1 && pred && setStep(2))} />
       )}
       {reviewing && step === 1 && <section className="review-panel card" aria-label="Review assessment"><p className="eyebrow">REVIEW BEFORE GENERATING</p><h2>Confirm the clinical profile</h2>{demoAssessments[selectedPatient] && <p className="note">Synthetic demo assessment · invented values for software testing only.</p>}<p>{selectedPatient || "Local assessment"} · {visitDate} · Age {inp.age}</p><div className="grid2"><p>Right eye: {inp.odSphere} D / {inp.odCyl} D × {inp.odAxis}° · AL {inp.odAl} mm</p><p>Left eye: {inp.osSphere} D / {inp.osCyl} D × {inp.osAxis}° · AL {inp.osAl} mm</p></div><p>Goal: {inp.primary_goal}. All results require clinical review.</p><div className="research-actions"><button className="btn btn-ghost" disabled={loading} onClick={()=>setReviewing(false)}>Continue editing</button><button className="btn btn-primary" disabled={loading} onClick={runPredict}>{loading ? `Generating · ${elapsedSeconds}s` : "Confirm & generate recommendation"}</button></div></section>}
@@ -555,6 +561,7 @@ export default function Page() {
       )}
       {(!authRequired || clinicalSession) && step === 3 && (
         <Screen3 fu={fu} setFuVal={setFuVal} res={fuRes} pending={fuPending}
+          isDemo={!!demoAssessments[selectedPatient]} onLoadDemo={loadDemoFollowup}
           designId={pred?.design_id} onDownload={downloadFollowupReport}
           onRefit={runRefit} canRefit={!!pred && !!fuRes && !fuPending} refitting={submitting}
           go={(i) => (i === 0 ? setStep(1) : i === 1 && pred ? setStep(2) : null)} onAssess={runFollowup} />
@@ -841,7 +848,7 @@ function EyeBlock({ eye, prefix, inp, set }) {
 // research analysis without implying that it affects the current fit.
 // Showing that is not cosmetic: an unmarked dead field makes a clinician
 // believe a measurement influenced the design when it did not.
-function NumField({ label, unit, step, value, onChange, pending }) {
+function NumField({ label, unit, step, value, onChange, pending, readOnly = false }) {
   const id = useId();
   const min = /axis/i.test(label) ? 0 : /AL|Axial length/.test(label) ? 18 : label === "Age" ? 3 : /sphere|cylinder/i.test(label) ? -20 : unit?.includes("/ 10") ? 0 : undefined;
   const max = /axis/i.test(label) ? 180 : /AL|Axial length/.test(label) ? 35 : label === "Age" ? 100 : /sphere|cylinder/i.test(label) ? 20 : unit?.includes("/ 10") ? 10 : undefined;
@@ -851,7 +858,7 @@ function NumField({ label, unit, step, value, onChange, pending }) {
         {label}{unit ? <span className="unit"> · {unit}</span> : null}
         {pending && <span className="pending-tag" title={PENDING_HINT}>{pending}</span>}
       </label>
-      <input id={id} required={!unit?.includes("optional") && !unit?.includes("legacy") && !pending} type="number" step={step} min={min} max={max} value={value} onChange={onChange} />
+      <input id={id} required={!unit?.includes("optional") && !unit?.includes("legacy") && !pending} type="number" step={step} min={min} max={max} readOnly={readOnly} value={value} onChange={onChange} />
     </div>
   );
 }
@@ -866,12 +873,12 @@ function TextField({ label, unit, value, onChange, placeholder }) {
   );
 }
 
-function DateField({ label, value, onChange }) {
+function DateField({ label, value, onChange, readOnly = false, min }) {
   const id = useId();
   return (
     <div className="field">
       <label htmlFor={id}>{label}</label>
-      <input id={id} required type="date" value={value} onInput={onChange} onChange={onChange} />
+      <input id={id} required type="date" value={value} readOnly={readOnly} min={min} onInput={onChange} onChange={onChange} />
     </div>
   );
 }
@@ -1148,14 +1155,15 @@ function Metric({ cap, big, sub }) {
   );
 }
 
-function Screen3({ fu, setFuVal, res, pending, designId, go, onDownload, onRefit, canRefit, refitting, onAssess }) {
+function Screen3({ fu, setFuVal, res, pending, designId, go, onDownload, onRefit, canRefit, refitting, onAssess, isDemo, onLoadDemo }) {
   const fmt = (x) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(2)}`;
   const tier = res ? FU_TIERS[res.progression_band] : null;
 
   return (
-    <div>
+    <div className="followup-workspace">
       <Crumbs step={3} go={go} />
-      <h1 className="title">Follow-up visit</h1>
+      <h2 className="title">Follow-up visit</h2>
+      {isDemo && <div className="demo-assessment-tools" role="note"><div><strong>Synthetic follow-up · six-month scenario</strong><p>Invented future measurements for testing only. Baseline comes from your confirmed assessment.</p></div><button type="button" className="btn btn-ghost" disabled={pending || refitting} onClick={onLoadDemo}>Load demo follow-up</button></div>}
       <p className="sub">
         Record binocular change, comfort and actual exposure. The system supports the
         clinician&apos;s decision and does not make an autonomous diagnosis.
@@ -1165,21 +1173,21 @@ function Screen3({ fu, setFuVal, res, pending, designId, go, onDownload, onRefit
       <form onSubmit={e=>{e.preventDefault();onAssess();}} className="card lift" style={{ marginTop: 20, marginBottom: 16 }}>
         <div className="cap" style={{ marginBottom: 16 }}>AXIAL-LENGTH READINGS · OD / OS</div>
         <div className="grid2" style={{ marginBottom: 18 }}>
-          <DateField label="Baseline date" value={fu.baselineDate} onChange={setFuVal("baselineDate")} />
+          <DateField label="Baseline date" value={fu.baselineDate} onChange={setFuVal("baselineDate")} readOnly={!!designId} />
           <DateField label="Follow-up date" value={fu.followupDate} onChange={setFuVal("followupDate")} />
         </div>
         <div className="grid2" style={{ marginBottom: 24 }}>
-          <NumField label="OD baseline AL" unit="mm" step="0.01" value={fu.baselineOd} onChange={setFuVal("baselineOd")} />
+          <NumField label="OD baseline AL" unit="mm" step="0.01" value={fu.baselineOd} onChange={setFuVal("baselineOd")} readOnly={!!designId} />
           <NumField label="OD follow-up AL" unit="mm" step="0.01" value={fu.followupOd} onChange={setFuVal("followupOd")} />
-          <NumField label="OS baseline AL" unit="mm" step="0.01" value={fu.baselineOs} onChange={setFuVal("baselineOs")} />
+          <NumField label="OS baseline AL" unit="mm" step="0.01" value={fu.baselineOs} onChange={setFuVal("baselineOs")} readOnly={!!designId} />
           <NumField label="OS follow-up AL" unit="mm" step="0.01" value={fu.followupOs} onChange={setFuVal("followupOs")} />
         </div>
         <div className="divider" style={{ margin: "22px 0" }} />
         <div className="cap cap-sm" style={{ marginBottom: 12 }}>REFRACTION</div>
         <div className="grid2">
-          <NumField label="OD baseline sphere" unit="D" step="0.25" value={fu.baselineOdSphere} onChange={setFuVal("baselineOdSphere")} />
+          <NumField label="OD baseline sphere" unit="D" step="0.25" value={fu.baselineOdSphere} onChange={setFuVal("baselineOdSphere")} readOnly={!!designId} />
           <NumField label="OD current sphere" unit="D" step="0.25" value={fu.currentOdSphere} onChange={setFuVal("currentOdSphere")} />
-          <NumField label="OS baseline sphere" unit="D" step="0.25" value={fu.baselineOsSphere} onChange={setFuVal("baselineOsSphere")} />
+          <NumField label="OS baseline sphere" unit="D" step="0.25" value={fu.baselineOsSphere} onChange={setFuVal("baselineOsSphere")} readOnly={!!designId} />
           <NumField label="OS current sphere" unit="D" step="0.25" value={fu.currentOsSphere} onChange={setFuVal("currentOsSphere")} />
         </div>
         <div className="divider" style={{ margin: "22px 0" }} />
@@ -1191,12 +1199,14 @@ function Screen3({ fu, setFuVal, res, pending, designId, go, onDownload, onRefit
           <NumField label="Average wear" unit="h/day" step="0.5" value={fu.wear} onChange={setFuVal("wear")} />
           <SelectField label="Compliance" unit="" value={fu.compliance}
             onChange={setFuVal("compliance")} options={["Good", "Partial", "Poor", "Unknown"]} />
+        </div>
+        <details className="followup-optional"><summary>Optional measurements &amp; events</summary><div className="grid2">
           <NumField label="Baseline CSF" unit="optional" step="0.1" value={fu.baselineCsf} onChange={setFuVal("baselineCsf")} />
           <NumField label="Current CSF" unit="optional" step="0.1" value={fu.currentCsf} onChange={setFuVal("currentCsf")} />
           <TextField label="Adverse event" unit="optional" value={fu.adverseEvent} onChange={setFuVal("adverseEvent")} />
           <TextField label="Intolerance" unit="optional" value={fu.intolerance} onChange={setFuVal("intolerance")} />
-        </div>
-        <button className="btn btn-primary" disabled={pending}>{pending ? "Assessing…" : "Assess follow-up"}</button>
+        </div></details>
+        <div className="followup-assess-action"><button className="btn btn-primary" disabled={pending || refitting}>{pending ? "Assessing…" : "Assess follow-up"}</button><span className="note" role="status">{pending ? "Calculating from the entered dates and measurements…" : res ? "Assessment complete. Editing a field requires reassessment." : "Review the visit, then assess to calculate changes."}</span></div>
       </form>
 
       <div className="followup-metrics" style={{ marginBottom: 16 }}>
@@ -1256,9 +1266,9 @@ function Screen3({ fu, setFuVal, res, pending, designId, go, onDownload, onRefit
         </div>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginTop: 20 }}>
-        <span className="note">Report appends this visit to the patient&apos;s progression record.</span>
-        <div style={{ display: "flex", gap: 10 }}>
+      <div className="followup-footer">
+        <span className="note">{isDemo ? "Synthetic test visit · not a clinical outcome." : "Review the assessment before exporting or generating the next recommendation."}</span>
+        <div className="research-actions">
           <button className="btn btn-ghost" disabled={!res || pending} onClick={onDownload}>Download follow-up report ⤓</button>
           <button className="btn btn-primary" disabled={!canRefit || refitting} onClick={onRefit}>
             {refitting ? "Generating…" : "Generate Next Recommendation →"}

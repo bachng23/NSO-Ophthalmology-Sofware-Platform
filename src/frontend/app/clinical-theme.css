@@ -1,6 +1,14 @@
 @layer workspace-base, clinical-theme;
 
 @layer clinical-theme {
+.followup-workspace .followup-metrics { grid-template-columns:repeat(4,minmax(0,1fr)); }
+.followup-workspace .metric-big { font-size:clamp(20px,1.6vw,28px); line-height:1.25; overflow-wrap:anywhere; }
+.followup-optional { margin:16px 0; border-top:1px solid #d8d8dc; padding-top:12px; }
+.followup-optional summary { cursor:pointer; color:#466b96; font-size:13px; margin-bottom:12px; }
+.followup-assess-action, .followup-footer { display:flex; flex-wrap:wrap; align-items:center; gap:12px; }
+.followup-footer { justify-content:space-between; margin-top:20px; }
+.followup-footer .research-actions { flex-wrap:wrap; margin:0; }
+.followup-workspace input:read-only { background:#f6f7f9; color:#5b5f68; }
 .demo-assessment-tools { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin:12px 0; padding:12px 16px; border:1px solid #c6d5e4; border-radius:10px; background:#f0f5fa; color:#385778; font-size:13px; }
 .demo-assessment-tools p { margin:4px 0 0; font-size:13px; }
 .demo-assessment-tools .research-actions { margin:0; }

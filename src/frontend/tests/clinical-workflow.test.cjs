@@ -7,12 +7,23 @@ const {create,act}=require('react-test-renderer');
 const {buildSync}=require('esbuild');
 function load(file){const entry=path.resolve(__dirname,'../app',file);const bundle=buildSync({entryPoints:[entry],bundle:true,write:false,format:'cjs',platform:'node',jsx:'automatic',loader:{'.js':'jsx'},external:['react','react/jsx-runtime'],logLevel:'silent'});const m=new Module(entry,module);m.filename=entry;m.paths=Module._nodeModulePaths(path.dirname(entry));m._compile(bundle.outputFiles[0].text,entry);return m.exports;}
 const Page=load('page.js').default;
-const {baselineFrom,blankProfile,checkedJson}=load('lib/clinical.js');
+const {baselineFrom,demoFollowupFrom,blankProfile,checkedJson}=load('lib/clinical.js');
 const fixture=require('./fixtures/clinical-result.json');
 const flush=()=>new Promise(r=>setImmediate(r));
 const button=(r,name)=>r.root.findAllByType('button').find(b=>b.children.join('')===name);
 function field(r,name){const label=r.root.findAllByType('label').find(l=>l.children.some(c=>typeof c==='string' && c===name));return r.root.findAllByType('input').find(i=>i.props.id===label.props.htmlFor);}
 const event={preventDefault(){}};
+test('demo follow-up uses confirmed measurements and valid six-month dates',()=>{
+ for(const demo of Object.values(require('../app/lib/demo-assessments.json'))){
+  const fu=demoFollowupFrom(demo.profile,demo.visitDate);
+  assert.equal(fu.baselineOd,demo.profile.odAl);
+  assert.equal(fu.followupDate,'2027-05-01');
+  assert.equal(fu.currentOsSphere,demo.profile.osSphere-.25);
+  for(const key of ['baselineOd','followupOd','baselineOs','followupOs','baselineOdSphere','currentOdSphere','baselineOsSphere','currentOsSphere','baselineComfort','currentComfort','stress','wear'])assert.ok(Number.isFinite(fu[key]),key);
+ }
+ assert.equal(demoFollowupFrom({odAl:24,osAl:24,odSphere:-2,osSphere:-2},'2026-08-31').followupDate,'2027-02-28');
+ assert.equal(demoFollowupFrom({odAl:24,osAl:24,odSphere:-2,osSphere:-2},'2027-08-31').followupDate,'2028-02-29');
+});
 test('demo assessments match the ten synthetic histories',()=>{
  const demos=require('../app/lib/demo-assessments.json');
  const dataset=require('../../backend/nso/data/demo_patients.json');
@@ -37,7 +48,8 @@ test('demo login prefills inputs, preserves drafts, and invalidates results on r
   const payload=url.endsWith('/health')?{authentication_required:true}:
    url.endsWith('/login')?{access_token:'test-token'}:
    url.endsWith('/cases')?{cases:[...Object.keys(require('../app/lib/demo-assessments.json')),'REAL-001'].map(patient_id=>({patient_id,case_id:patient_id+'-CASE'}))}:
-   url.includes('/observations')?{observations:[]}:fixture;
+   url.includes('/observations')?{observations:[]}:
+   url.endsWith('/followup')?require('./fixtures/followup-result.json'):fixture;
   return {ok:true,json:async()=>payload};
  };
  try{
@@ -72,6 +84,35 @@ test('demo login prefills inputs, preserves drafts, and invalidates results on r
   assert.ok(button(r,'Confirm & generate recommendation'));
   assert.equal(calls.filter(([url])=>url.endsWith('/predict')).length,0);
   await act(async()=>{await button(r,'Confirm & generate recommendation').props.onClick();});
+  act(()=>button(r,'Track follow-up →').props.onClick());
+  assert.equal(field(r,'Follow-up date').props.value,'2027-05-01');
+  assert.equal(field(r,'OD follow-up AL').props.value,23.52);
+  assert.equal(field(r,'OD baseline AL').props.readOnly,true);
+  assert.equal(field(r,'Baseline date').props.readOnly,true);
+  assert.equal(calls.filter(([url])=>url.endsWith('/followup')).length,0);
+  for(const input of r.root.findAllByType('input').filter(x=>x.props.type==='number')){
+   const {value,min,max,step,required}=input.props;
+   if(value===''){assert.equal(required,false);continue;}
+   if(min!==undefined)assert.ok(value>=min);
+   if(max!==undefined)assert.ok(value<=max);
+   const n=(Number(value)-Number(min??0))/Number(step??1);
+   assert.ok(Math.abs(n-Math.round(n))<1e-7,`Follow-up step mismatch: ${value}`);
+  }
+  await act(async()=>{r.root.findAllByType('form').find(f=>f.findAllByType('input').some(i=>i.props.type==='number')).props.onSubmit(event);await flush();});
+  assert.equal(button(r,'Generate Next Recommendation →').props.disabled,false);
+  const body=JSON.parse(calls.find(([url])=>url.endsWith('/followup'))[1].body);
+  assert.equal(body.followup_od_al,23.52);
+  assert.equal(body.baseline_date,'2026-11-01');
+  await act(async()=>{await button(r,'Generate Next Recommendation →').props.onClick();});
+  assert.ok(button(r,'Approve Design'));
+  assert.equal(button(r,'Send Approved Design').props.disabled,true);
+  assert.equal(r.root.findByProps({'aria-label':'Assessment date'}).props.max,undefined);
+  act(()=>button(r,'Track follow-up →').props.onClick());
+  assert.equal(field(r,'Baseline date').props.value,'2027-05-01');
+  assert.equal(field(r,'Follow-up date').props.value,'2027-11-01');
+  act(()=>button(r,'Load demo follow-up').props.onClick());
+  assert.equal(button(r,'Generate Next Recommendation →').props.disabled,true);
+  act(()=>button(r,'Review recommendation').props.onClick());
   act(()=>button(r,'Clinical input').props.onClick());
   act(()=>button(r,'Load demo data').props.onClick());
   assert.equal(button(r,'Approve Design'),undefined);

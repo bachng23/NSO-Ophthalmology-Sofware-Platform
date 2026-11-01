@@ -79,3 +79,31 @@ form's 0.25 D step, preserving the original historical SE. Regression checks
 validate every populated numeric input against its rendered min/max/step for all
 ten demo patients. The new check reproduced the original -1.375 D sphere failure
 before correction; prior component submit tests bypassed native form validation.
+
+## Follow-up demo and desktop verification
+
+For the ten demo IDs, generating a recommendation now prepares an explicitly
+invented six-month future follow-up: baseline comes from the confirmed assessment,
+OD/OS AL change is +0.08/+0.06 mm, sphere change is -0.25 D, and comfort/wear/
+compliance fields are filled. `Load demo follow-up` restores this scenario and
+clears any prior follow-up result. Real patient follow-up values remain blank.
+Optional CSF and adverse-event fields are collapsed, never fabricated. Baseline
+date, AL and sphere are read-only when linked to a design. Metrics and footer
+actions wrap within the page; the header no longer mislabels every step as
+Clinical assessment. Generating a new recommendation clears old follow-up results.
+
+23 frontend tests and the production build passed. Tests cover date clamping
+(including leap years), all demo profiles, rendered numeric constraints, explicit
+follow-up submission, baseline identity and result invalidation. On Brave desktop,
+the local frontend at 3170 was checked against the deployed backend using only
+SYN-DEMO-001: sign-in, native clinical form validation, review, prediction and
+follow-up assessment succeeded; observed changes were +0.08/+0.06 mm, annualized
+OD +0.16 mm/year. This browser test wrote synthetic prediction/outcome records to
+the cloud database; it did not release manufacturing or use real patient data.
+Screenshot: `followup-demo-2026-11-01.png`. A development hydration warning listed
+only extension-injected `bis_*` attributes; it was not suppressed in application
+code. The local test server is stopped after inspection. Deployment of the new
+frontend on Vercel has not yet been verified. Refit also succeeded on the demo,
+created revision R1 and kept manufacturing submission disabled pending approval.
+Only explicitly identified demo patients permit future assessment dates for this
+invented follow-up/refit scenario; real assessments retain the current-date limit.

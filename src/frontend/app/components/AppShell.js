@@ -15,6 +15,6 @@ export default function AppShell({ children }) {
       <nav aria-label="Workspace"><Link href="/" aria-label="Patient care" title="Patient care" aria-current={path === "/" ? "page" : undefined}><NavIcon/><span className="sidebar-label">Patient care</span></Link><Link href="/research" aria-label="Research & engineering" title="Research & engineering" aria-current={path.startsWith("/research") ? "page" : undefined}><NavIcon research/><span className="sidebar-label">Research & engineering</span></Link></nav>
       <div className="sidebar-footer"><span className="status-dot" /><span className="sidebar-label">Clinical pilot</span></div>
     </aside>
-    <div className="app-main"><header className="app-header"><span>{path === "/" ? "Patient care / Clinical assessment" : "Research / Study workspace"}</span><span className="workspace-tag">NSO · Decision support</span></header>{children}</div>
+    <div className="app-main"><header className="app-header"><span>{path === "/" ? "Patient care" : "Research / Study workspace"}</span><span className="workspace-tag">NSO · Decision support</span></header>{children}</div>
   </div>;
 }

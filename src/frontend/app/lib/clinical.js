@@ -2,6 +2,20 @@ export const today = () => new Intl.DateTimeFormat("en-CA", {year:"numeric",mont
 export const EMPTY_FOLLOWUP = {baselineOd:"",followupOd:"",baselineOs:"",followupOs:"",baselineOdSphere:"",currentOdSphere:"",baselineOsSphere:"",currentOsSphere:"",interval:6,baselineComfort:"",currentComfort:"",stress:"",wear:"",compliance:"Unknown",baselineDate:"",followupDate:"",baselineCsf:"",currentCsf:"",adverseEvent:"",intolerance:""};
 export function blankProfile(example) { return Object.fromEntries(Object.entries(example).map(([k,v])=>[k, typeof v === "number" ? "" : v])); }
 export function baselineFrom(profile, date) { return {...EMPTY_FOLLOWUP, baselineOd:profile.odAl, baselineOs:profile.osAl, baselineOdSphere:profile.odSphere, baselineOsSphere:profile.osSphere,baselineDate:date}; }
+// Invented six-month follow-up for explicitly synthetic demo patients only.
+export function demoFollowupFrom(profile, baselineDate) {
+  const baseline = baselineFrom(profile, baselineDate);
+  const start = new Date(`${baselineDate}T00:00:00Z`);
+  if (!Number.isFinite(start.getTime())) return baseline;
+  const next = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth()+7, 0));
+  next.setUTCDate(Math.min(start.getUTCDate(), next.getUTCDate()));
+  return {...baseline, followupDate:next.toISOString().slice(0,10),
+    followupOd:Number((Number(profile.odAl)+0.08).toFixed(2)),
+    followupOs:Number((Number(profile.osAl)+0.06).toFixed(2)),
+    currentOdSphere:Number(profile.odSphere)-0.25,
+    currentOsSphere:Number(profile.osSphere)-0.25,
+    baselineComfort:6,currentComfort:8,stress:3,wear:10,compliance:"Good"};
+}
 export function clinicalError(error) { return error instanceof TypeError ? "Connection interrupted. Your entries are still here. Check the connection and try again." : error.message; }
 export async function checkedJson(response) {
   let data;
