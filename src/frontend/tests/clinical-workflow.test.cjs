@@ -36,7 +36,7 @@ test('demo login prefills inputs, preserves drafts, and invalidates results on r
   calls.push([url,options]);
   const payload=url.endsWith('/health')?{authentication_required:true}:
    url.endsWith('/login')?{access_token:'test-token'}:
-   url.endsWith('/cases')?{cases:['SYN-DEMO-001','SYN-DEMO-002','REAL-001'].map(patient_id=>({patient_id,case_id:patient_id+'-CASE'}))}:
+   url.endsWith('/cases')?{cases:[...Object.keys(require('../app/lib/demo-assessments.json')),'REAL-001'].map(patient_id=>({patient_id,case_id:patient_id+'-CASE'}))}:
    url.includes('/observations')?{observations:[]}:fixture;
   return {ok:true,json:async()=>payload};
  };
@@ -48,6 +48,23 @@ test('demo login prefills inputs, preserves drafts, and invalidates results on r
   assert.equal(calls.filter(([url])=>url.endsWith('/predict')).length,0);
   act(()=>field(r,'Age').props.onChange({target:{value:'10'}}));
   const select=id=>act(()=>r.root.findByProps({'aria-label':'Assigned patient'}).props.onChange({target:{value:id}}));
+  // onSubmit in react-test-renderer bypasses browser constraint validation.
+  // Check the rendered numeric constraints for every demo before invoking it.
+  for(const id of Object.keys(require('../app/lib/demo-assessments.json'))){
+   select(id);
+   for(const input of r.root.findAllByType('input').filter(x=>x.props.type==='number')){
+    const {value,min,max,step}=input.props;
+    const label=r.root.findAllByType('label').find(l=>l.props.htmlFor===input.props.id)?.children[0];
+    if(value===''){assert.equal(input.props.required,false,`${id} ${label} missing`);continue;}
+    assert.ok(Number.isFinite(Number(value)),`${id} ${label} invalid`);
+    if(min!==undefined)assert.ok(Number(value)>=Number(min),`${id} ${label} below min`);
+    if(max!==undefined)assert.ok(Number(value)<=Number(max),`${id} ${label} above max`);
+    if(step!=='any'){
+     const units=(Number(value)-Number(min??0))/Number(step??1);
+     assert.ok(Math.abs(units-Math.round(units))<1e-7,`${id} ${label} step mismatch: ${value}`);
+    }
+   }
+  }
   select('SYN-DEMO-002');assert.equal(field(r,'Age').props.value,9);
   select('SYN-DEMO-001');assert.equal(field(r,'Age').props.value,'10');
   act(()=>button(r,'Load demo data').props.onClick());assert.equal(field(r,'Age').props.value,8);

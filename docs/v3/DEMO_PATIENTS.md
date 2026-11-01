@@ -73,3 +73,9 @@ build passed. Checks cover fixture/history consistency, automatic fill on demo
 sign-in, per-patient draft preservation, explicit confirmation, result invalidation
 on reload, clearing inputs and keeping real patient IDs blank. Cloud deployment
 of this change must still be verified separately.
+
+Demo refraction correction: all example sphere/cylinder values now follow the
+form's 0.25 D step, preserving the original historical SE. Regression checks
+validate every populated numeric input against its rendered min/max/step for all
+ten demo patients. The new check reproduced the original -1.375 D sphere failure
+before correction; prior component submit tests bypassed native form validation.
