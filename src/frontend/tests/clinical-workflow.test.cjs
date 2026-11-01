@@ -13,6 +13,57 @@ const flush=()=>new Promise(r=>setImmediate(r));
 const button=(r,name)=>r.root.findAllByType('button').find(b=>b.children.join('')===name);
 function field(r,name){const label=r.root.findAllByType('label').find(l=>l.children.some(c=>typeof c==='string' && c===name));return r.root.findAllByType('input').find(i=>i.props.id===label.props.htmlFor);}
 const event={preventDefault(){}};
+test('demo assessments match the ten synthetic histories',()=>{
+ const demos=require('../app/lib/demo-assessments.json');
+ const dataset=require('../../backend/nso/data/demo_patients.json');
+ assert.equal(Object.keys(demos).length,10);
+ assert.equal(demos['REAL-001'],undefined);
+ for(const patient of dataset.patients){
+  const {profile,visitDate}=demos[patient.patient_id];
+  assert.equal(profile.age,patient.age_at_latest_visit);
+  for(const [eye,prefix] of [['OD','od'],['OS','os']]){
+   const last=patient.eyes[eye].at(-1);
+   assert.equal(visitDate,last.visit_at);
+   assert.equal(profile[prefix+'Al'],last.al_mm);
+   assert.equal(profile[prefix+'Sphere']+profile[prefix+'Cyl']/2,last.se_d);
+  }
+ }
+});
+test('demo login prefills inputs, preserves drafts, and invalidates results on reload',async()=>{
+ const oldFetch=global.fetch,oldWindow=global.window;let r;const calls=[];
+ global.window={addEventListener(){},removeEventListener(){},scrollTo(){},setInterval,clearInterval,setTimeout,clearTimeout};
+ global.fetch=async(url,options)=>{
+  calls.push([url,options]);
+  const payload=url.endsWith('/health')?{authentication_required:true}:
+   url.endsWith('/login')?{access_token:'test-token'}:
+   url.endsWith('/cases')?{cases:['SYN-DEMO-001','SYN-DEMO-002','REAL-001'].map(patient_id=>({patient_id,case_id:patient_id+'-CASE'}))}:
+   url.includes('/observations')?{observations:[]}:fixture;
+  return {ok:true,json:async()=>payload};
+ };
+ try{
+  await act(async()=>{r=create(React.createElement(Page));await flush();});
+  act(()=>r.root.findAllByType('input').find(i=>i.props.autoComplete==='current-password').props.onChange({target:{value:'test-only'}}));
+  await act(async()=>{await r.root.findAllByType('form')[0].props.onSubmit(event);await flush();});
+  assert.equal(field(r,'Age').props.value,8);
+  assert.equal(calls.filter(([url])=>url.endsWith('/predict')).length,0);
+  act(()=>field(r,'Age').props.onChange({target:{value:'10'}}));
+  const select=id=>act(()=>r.root.findByProps({'aria-label':'Assigned patient'}).props.onChange({target:{value:id}}));
+  select('SYN-DEMO-002');assert.equal(field(r,'Age').props.value,9);
+  select('SYN-DEMO-001');assert.equal(field(r,'Age').props.value,'10');
+  act(()=>button(r,'Load demo data').props.onClick());assert.equal(field(r,'Age').props.value,8);
+  act(()=>r.root.findAllByType('form').find(f=>f.findAllByType('input').some(i=>i.props.type==='number')).props.onSubmit(event));
+  assert.ok(button(r,'Confirm & generate recommendation'));
+  assert.equal(calls.filter(([url])=>url.endsWith('/predict')).length,0);
+  await act(async()=>{await button(r,'Confirm & generate recommendation').props.onClick();});
+  act(()=>button(r,'Clinical input').props.onClick());
+  act(()=>button(r,'Load demo data').props.onClick());
+  assert.equal(button(r,'Approve Design'),undefined);
+  assert.equal(r.root.findByProps({'aria-label':'Assessment date'}).props.value,'2026-11-01');
+  act(()=>button(r,'Clear inputs').props.onClick());assert.equal(field(r,'Age').props.value,'');
+  select('REAL-001');assert.equal(field(r,'Age').props.value,'');
+  assert.equal(button(r,'Load demo data'),undefined);
+ }finally{if(r)act(()=>r.unmount());global.fetch=oldFetch;global.window=oldWindow;}
+});
 test('baseline uses the confirmed visit and never invents follow-up measurements',()=>{const baseline=baselineFrom({odAl:26.2,osAl:26,odSphere:-5,osSphere:-4.5},'2026-10-30');assert.equal(baseline.baselineOd,26.2);assert.equal(baseline.baselineDate,'2026-10-30');assert.equal(baseline.followupOd,'');assert.equal(baseline.followupDate,'');assert.equal(blankProfile({age:11,npc:9}).age,'');});
 test('non-JSON server failures are presented as a recoverable service error',async()=>{await assert.rejects(checkedJson({status:500,ok:false,json:async()=>{throw new SyntaxError('Internal Server Error')}}),/entries are preserved/);});
 test('clinical workflow confirms entries, derives follow-up baseline, and never auto-submits edits',async()=>{

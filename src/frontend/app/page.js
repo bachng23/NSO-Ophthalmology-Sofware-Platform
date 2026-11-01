@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useId } from "react";
 import PatientHistory from "./components/PatientHistory";
 import {useWorkspaceState,useWorkspaceCache} from "./components/SessionWorkspace";
 import { blankProfile, baselineFrom, EMPTY_FOLLOWUP, today, checkedJson, clinicalError } from "./lib/clinical";
+import demoAssessments from "./lib/demo-assessments.json";
 
 const API = process.env.NEXT_PUBLIC_API_BASE || "/backend";
 
@@ -204,6 +205,7 @@ export default function Page() {
       clearClinicalData();
       setAssignedPatients([...new Set(data.cases.map(c=>c.patient_id))]);
       setSelectedPatient(data.cases[0]?.patient_id || "");
+      loadDemoAssessment(data.cases[0]?.patient_id);
       setClinicalSession(credential); setAdminSession(true);
     } catch(error) {
       if (credential) fetch(`${API}/api/v3/auth/clinical-admin/logout`, {method:"POST",headers:{Authorization:`Bearer ${credential}`}}).catch(()=>{});
@@ -212,6 +214,19 @@ export default function Page() {
   }
 
   function invalidateClinical() { operation.current++; followupRequest.current++; setPred(null); setApproval(null); setJob(null); setFuRes(null); setReviewing(false); }
+  function loadDemoAssessment(id = selectedPatient) {
+    const demo = demoAssessments[id];
+    if (!demo) return;
+    invalidateClinical();
+    setInp({...demo.profile}); setVisitDate(demo.visitDate);
+    setAdv({...ADV_DEFAULTS}); setRes({...RESEARCH_DEFAULTS});
+    setFu({...EMPTY_FOLLOWUP}); setErr(null);
+  }
+  function clearAssessmentInputs() {
+    invalidateClinical(); setInp(blankProfile(DEFAULTS));
+    setAdv({...ADV_DEFAULTS}); setRes({...RESEARCH_DEFAULTS});
+    setFu({...EMPTY_FOLLOWUP}); setErr(null);
+  }
   const set = k => e => { invalidateClinical(); setInp({...inp,[k]:e.target.value}); };
   const setA = k => e => { invalidateClinical(); setAdv({...adv,[k]:e.target.value}); };
   const setR = k => e => { invalidateClinical(); setRes({...res,[k]:e.target.value}); };
@@ -220,6 +235,7 @@ export default function Page() {
     clearClinicalData(); setSelectedPatient(id);
     const saved=drafts.current[id];
     if(saved) { setInp(saved.inp);setAdv(saved.adv);setRes(saved.res);setFu(saved.fu);setPred(saved.pred);setApproval(saved.approval);setJob(saved.job);setVisitDate(saved.visitDate);setBaselineHistory(saved.baselineHistory); }
+    else loadDemoAssessment(id);
   }
 
   function predictBody() {
@@ -508,27 +524,28 @@ export default function Page() {
           <button className="btn btn-primary" disabled={signingIn}>{signingIn ? "Signing in…" : "Sign in"}</button>
         </form>}
         {authRequired && !clinicalSession && <details className="research-details"><summary>Use a clinical access code</summary>
-        {!clinicalSession ? <form onSubmit={async e=>{e.preventDefault();try{const response=await fetch(`${API}/api/v3/cases`,{headers:{Authorization:`Bearer ${accessCode}`},cache:"no-store"});const data=await response.json();if(!response.ok)throw new Error(data.detail?.message || "Access was not authorized");setAssignedPatients([...new Set(data.cases.map(c=>c.patient_id))]);setSelectedPatient(data.cases[0]?.patient_id || "");setClinicalSession(accessCode);setAccessCode("");setErr(null);}catch(error){setErr(clinicalError(error));}}}>
+        {!clinicalSession ? <form onSubmit={async e=>{e.preventDefault();try{const response=await fetch(`${API}/api/v3/cases`,{headers:{Authorization:`Bearer ${accessCode}`},cache:"no-store"});const data=await response.json();if(!response.ok)throw new Error(data.detail?.message || "Access was not authorized");setAssignedPatients([...new Set(data.cases.map(c=>c.patient_id))]);clearClinicalData();setSelectedPatient(data.cases[0]?.patient_id || "");loadDemoAssessment(data.cases[0]?.patient_id);setClinicalSession(accessCode);setAccessCode("");setErr(null);}catch(error){setErr(clinicalError(error));}}}>
           <label className="field">Clinical session access code<input type="password" autoComplete="off" required value={accessCode} onChange={e=>setAccessCode(e.target.value)} /></label><button className="btn btn-primary">Connect assigned patients</button>
         </form> : null}</details>}
         {clinicalSession && <div className="research-session"><label className="field">Find patient<input type="search" placeholder="Search by patient ID" value={patientSearch} onChange={e=>setPatientSearch(e.target.value)} /></label><label className="field">Assigned patient<select value={selectedPatient} aria-label="Assigned patient" disabled={loading || submitting || fuPending} onChange={e=>selectPatient(e.target.value)}>{assignedPatients.filter(p=>p.toLowerCase().includes(patientSearch.toLowerCase()) || p===selectedPatient).map(p=><option key={p}>{p}</option>)}</select></label><label className="field">Assessment date<input aria-label="Assessment date" type="date" required max={today()} value={visitDate} disabled={loading || submitting || step !== 1} onInput={e=>{invalidateClinical();setVisitDate(e.currentTarget.value);}} onChange={e=>{invalidateClinical();setVisitDate(e.target.value);}} /></label><div className="clinical-session-actions"><span className="note">{adminSession ? adminUsername : "Clinical session"}</span><button className="btn btn-ghost" onClick={closeClinicalSession}>Sign out</button></div></div>}
       </section>
       {err && <div className="err" role="alert">{err}</div>}
 
-      {(!authRequired || (clinicalSession && selectedPatient)) && <p className="assessment-source">Manual assessment · verify current measurements. Drafts are retained in this session.</p>}
+      {(!authRequired || (clinicalSession && selectedPatient)) && !demoAssessments[selectedPatient] && <p className="assessment-source">Manual assessment · verify current measurements. Drafts are retained in this session.</p>}
       {!authRequired && !clinicalSession && <label className="field">Assessment date<input aria-label="Assessment date" type="date" required max={today()} value={visitDate} disabled={loading || submitting || step !== 1} onInput={e=>{invalidateClinical();setVisitDate(e.currentTarget.value);}} onChange={e=>{invalidateClinical();setVisitDate(e.target.value);}} /></label>}
       {clinicalSession && selectedPatient && <PatientHistory patient={selectedPatient} session={clinicalSession} />}
       {baselineHistory.length > 0 && <details className="visit-history"><summary>Assessment activity · {baselineHistory.length} recommendation(s) in this session</summary>{baselineHistory.map((v,i)=><p key={i}>{v.date} · {v.design}</p>)}</details>}
       {(!authRequired || (clinicalSession && selectedPatient)) && step === 1 && (
         <Screen1
           inp={inp} set={set} setInp={setInp}
+          isDemo={!!demoAssessments[selectedPatient]} onLoadDemo={()=>loadDemoAssessment()} onClearInputs={clearAssessmentInputs}
           adv={adv} setA={setA} setAdv={setAdv} advOpen={advOpen} setAdvOpen={setAdvOpen}
           res={res} setR={setR} resOpen={resOpen} setResOpen={setResOpen}
           loading={loading} progress={progress} longRunning={longRunning}
           hasResult={!!pred} elapsedSeconds={elapsedSeconds} run={()=>{ if(!visitDate || visitDate > today()) {setErr("Choose an assessment date on or before today.");return;} setReviewing(true); }}
           go={(i) => (i === 2 && pred ? goFollowup() : i === 1 && pred && setStep(2))} />
       )}
-      {reviewing && step === 1 && <section className="review-panel card" aria-label="Review assessment"><p className="eyebrow">REVIEW BEFORE GENERATING</p><h2>Confirm the clinical profile</h2><p>{selectedPatient || "Local assessment"} · {visitDate} · Age {inp.age}</p><div className="grid2"><p>Right eye: {inp.odSphere} D / {inp.odCyl} D × {inp.odAxis}° · AL {inp.odAl} mm</p><p>Left eye: {inp.osSphere} D / {inp.osCyl} D × {inp.osAxis}° · AL {inp.osAl} mm</p></div><p>Goal: {inp.primary_goal}. All results require clinical review.</p><div className="research-actions"><button className="btn btn-ghost" disabled={loading} onClick={()=>setReviewing(false)}>Continue editing</button><button className="btn btn-primary" disabled={loading} onClick={runPredict}>{loading ? `Generating · ${elapsedSeconds}s` : "Confirm & generate recommendation"}</button></div></section>}
+      {reviewing && step === 1 && <section className="review-panel card" aria-label="Review assessment"><p className="eyebrow">REVIEW BEFORE GENERATING</p><h2>Confirm the clinical profile</h2>{demoAssessments[selectedPatient] && <p className="note">Synthetic demo assessment · invented values for software testing only.</p>}<p>{selectedPatient || "Local assessment"} · {visitDate} · Age {inp.age}</p><div className="grid2"><p>Right eye: {inp.odSphere} D / {inp.odCyl} D × {inp.odAxis}° · AL {inp.odAl} mm</p><p>Left eye: {inp.osSphere} D / {inp.osCyl} D × {inp.osAxis}° · AL {inp.osAl} mm</p></div><p>Goal: {inp.primary_goal}. All results require clinical review.</p><div className="research-actions"><button className="btn btn-ghost" disabled={loading} onClick={()=>setReviewing(false)}>Continue editing</button><button className="btn btn-primary" disabled={loading} onClick={runPredict}>{loading ? `Generating · ${elapsedSeconds}s` : "Confirm & generate recommendation"}</button></div></section>}
       {(!authRequired || clinicalSession) && step === 2 && pred && (
         <Screen2 pred={pred} job={job} approval={approval} submitting={submitting}
           onApprove={approveDesign}
@@ -570,12 +587,13 @@ function Crumbs({ step, go, hasResult = true }) {
   );
 }
 
-function Screen1({ inp, set, setInp, adv, setA, setAdv, advOpen, setAdvOpen,
+function Screen1({ inp, set, setInp, isDemo, onLoadDemo, onClearInputs, adv, setA, setAdv, advOpen, setAdvOpen,
   res, setR, resOpen, setResOpen, loading, progress, longRunning, elapsedSeconds, run, go, hasResult }) {
   return (
     <form onSubmit={e=>{e.preventDefault();run();}}>
       <Crumbs step={1} go={go} hasResult={hasResult} />
       <h2 className="title">Clinical assessment</h2>
+      {isDemo && <div className="demo-assessment-tools" role="note"><div><strong>Synthetic demo patient</strong><p>Example values are prefilled for testing. Edit freely, then review before generating.</p></div><div className="research-actions"><button type="button" className="btn btn-ghost" disabled={loading} onClick={onLoadDemo}>Load demo data</button><button type="button" className="btn btn-ghost" disabled={loading} onClick={onClearInputs}>Clear inputs</button></div></div>}
       <p className="sub">
         Quick Fitting needs the core clinical profile only. Extended measurements are
         optional — they raise prediction confidence but are not required.

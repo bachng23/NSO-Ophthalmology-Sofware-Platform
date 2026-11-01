@@ -1,6 +1,9 @@
 @layer workspace-base, clinical-theme;
 
 @layer clinical-theme {
+.demo-assessment-tools { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px; margin:12px 0; padding:12px 16px; border:1px solid #c6d5e4; border-radius:10px; background:#f0f5fa; color:#385778; font-size:13px; }
+.demo-assessment-tools p { margin:4px 0 0; font-size:13px; }
+.demo-assessment-tools .research-actions { margin:0; }
 /* Steep-inspired clinical theme from the user-supplied DESIGN (4).md.
    Status colors remain semantic; the workspace palette stays monochrome. */
 :root {

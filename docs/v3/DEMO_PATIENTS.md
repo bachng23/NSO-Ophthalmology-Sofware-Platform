@@ -34,8 +34,19 @@ This is an explicit access-scope change to perform in the hosting dashboard.
 The seeder does not create accounts, change passwords or grant permissions.
 After redeployment, sign in again; the patient selector should contain these ten
 IDs and Patient History should display three visits per eye. Current fitting
-inputs remain manually confirmed; historical SE is not automatically treated as
-sphere, and the fixture does not invent CSF, corneal or binocular measurements.
+inputs for these ten demo IDs now open with invented core assessment values so
+reviewers can test without entering every field. The demo banner identifies them
+as synthetic. `Load demo data` restores that patient's example; `Clear inputs`
+returns to blank numeric inputs. Existing session drafts take precedence when
+switching patients. Real patient IDs continue to start blank.
+
+The frontend fixture `src/frontend/app/lib/demo-assessments.json` contains the
+invented core assessments. Age and AL match the latest backend demo visit;
+sphere/cylinder pairs have matching SE (`sphere + cylinder / 2`). Pupil,
+binocular, symptom and lifestyle values are invented examples, not extracted
+measurements. Advanced and research measurements remain blank. Loading examples
+does not call predict or approval APIs; users still review and confirm. Reloading
+or clearing inputs invalidates the previous recommendation and approval.
 
 ## Local isolated rehearsal
 
@@ -56,3 +67,9 @@ of unrelated/later records, identity and measurement collisions with rollback,
 patient-scoped case listing and FastAPI startup integration. The CLI was also run
 twice against an isolated SQLite file: 60 observations added, then 0 on replay.
 No cloud database was modified by these checks.
+
+Frontend prefill verification: 22 frontend tests passed and the Next.js production
+build passed. Checks cover fixture/history consistency, automatic fill on demo
+sign-in, per-patient draft preservation, explicit confirmation, result invalidation
+on reload, clearing inputs and keeping real patient IDs blank. Cloud deployment
+of this change must still be verified separately.
